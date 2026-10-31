@@ -1,16 +1,8 @@
 // Frontend API utilities for catalog (products & variants)
 
-import { apiClient } from '@/api/client';
+import { apiClient, PaginatedResponse } from '@/api/client';
 import type { Product, ProductVariant } from '@/api/mockData';
 import { addMockProduct, addMockVariant } from '@/api/mockData';
-
-/** Paginated response shape used by the mock client */
-export interface PaginatedResponse<T> {
-  count: number;
-  next: string | null;
-  previous: string | null;
-  results: T[];
-}
 
 /** Fetch all products (mock or real) */
 export const listProducts = async (): Promise<Product[]> => {
@@ -26,7 +18,7 @@ export const createProduct = async (
     // The mock helper returns the full product with an assigned id.
     return addMockProduct(payload) as Product;
   }
-  // Real backend endpoint (assumed) – POST /products/
+  // Real backend endpoint – POST /products/
   return apiClient.post<Product>('/products/', payload);
 };
 
@@ -38,6 +30,6 @@ export const addVariant = async (
   if (apiClient.getIsMockMode?.()) {
     return addMockVariant(productId, payload) as ProductVariant;
   }
-  // Real backend endpoint (assumed) – POST /products/{id}/variants/
+  // Real backend endpoint – POST /products/{id}/variants/
   return apiClient.post<ProductVariant>(`/products/${productId}/variants/`, payload);
 };

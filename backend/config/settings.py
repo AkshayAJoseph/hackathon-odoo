@@ -1,4 +1,5 @@
 import os
+import sys
 from pathlib import Path
 from datetime import timedelta
 from dotenv import load_dotenv
@@ -65,8 +66,9 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'config.wsgi.application'
 
-# Database configuration: PostgreSQL with fallback to SQLite for local tests
-DB_NAME = os.environ.get('POSTGRES_DB')
+# Database configuration: PostgreSQL with fallback to SQLite for local tests & offline
+IS_TESTING = 'pytest' in sys.modules or 'test' in sys.argv
+DB_NAME = os.environ.get('POSTGRES_DB') if not IS_TESTING else None
 if DB_NAME:
     DATABASES = {
         'default': {
