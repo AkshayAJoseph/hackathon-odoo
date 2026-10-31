@@ -9,3 +9,7 @@ dist/
 build/
 *.egg-info/
 .DS_Store
+# Ignore documentation and agent rules
+docs/SPEC.md
+README.md
+AGENTS.md
