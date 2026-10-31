@@ -3,6 +3,7 @@ from django.urls import path, include
 from core.views import HealthCheckView
 from accounts.views import StaffListCreateView
 from plans.views import QuotationTemplateListCreateView, QuotationTemplateDetailView
+from subscriptions.views import CreateSubscriptionFromTemplateView
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -19,6 +20,10 @@ urlpatterns = [
     path('api/quotation-templates/', QuotationTemplateListCreateView.as_view(), name='quotation-template-list-create-slash'),
     path('api/quotation-templates/<int:pk>', QuotationTemplateDetailView.as_view(), name='quotation-template-detail'),
     path('api/quotation-templates/<int:pk>/', QuotationTemplateDetailView.as_view(), name='quotation-template-detail-slash'),
+    path('api/quotation-templates/<int:pk>/create-subscription', CreateSubscriptionFromTemplateView.as_view(), name='quotation-template-create-subscription'),
+    path('api/quotation-templates/<int:pk>/create-subscription/', CreateSubscriptionFromTemplateView.as_view(), name='quotation-template-create-subscription-slash'),
+    path('api/subscriptions/', include('subscriptions.urls')),
+    path('api/subscriptions', include('subscriptions.urls')),
     path('api/taxes/', include('catalog.urls_tax')),
     path('api/discounts/', include('discounts.urls')),
     path('api/billing/', include('billing.urls')),

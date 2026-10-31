@@ -71,3 +71,11 @@ class SubscriptionLine(models.Model):
 
     def __str__(self):
         return f"{self.subscription.number} - {self.product.name} x {self.quantity}"
+
+
+class SubscriptionSequence(models.Model):
+    name = models.CharField(max_length=50, unique=True, default='subscription')
+    last_number = models.PositiveIntegerField(default=0)
+
+    def __str__(self):
+        return f"{self.name}: {self.last_number}"

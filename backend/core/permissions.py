@@ -1,4 +1,5 @@
 from rest_framework.permissions import BasePermission
+from core.services import scoped_queryset
 
 class IsAdmin(BasePermission):
     """
