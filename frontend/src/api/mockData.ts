@@ -423,3 +423,16 @@ export function addMockStaff(payload: Omit<User, 'id' | 'role'> & { role?: User[
   (MOCK_USERS as any)[`staff${nextId}`] = newUser;
   return newUser;
 }
+
+export interface Payment {
+  id: number;
+  invoice: number;
+  invoice_number: string;
+  method: string;
+  amount: string;
+  payment_date: string;
+  note: string;
+  recorded_by: number | null;
+  recorded_by_email: string;
+  created_at: string;
+}
