@@ -1,95 +1,155 @@
 # Brightloop Subscription Management System
 
-Brightloop is a unified subscription management and recurring billing platform built for the Odoo Hackathon.
+Brightloop is an end-to-end subscription management, recurring billing, and customer portal platform built for the Odoo Hackathon. It couples a Django REST Framework backend with a React (Vite + Tailwind) frontend to manage the entire lifecycle of SaaS plans, contracts, automated billing runs, payments, taxes, and customer self-service.
 
-## 🚀 Quick Start
+---
 
-### 1. Requirements & Setup
-- Python 3.12+ (tested on Python 3.13)
-- Dependencies: `django`, `djangorestframework`, `djangorestframework-simplejwt`, `django-cors-headers`, `pytest`, `pytest-django`, `factory_boy`
+## Quick Start
+
+### 1. Backend Setup
+
+Prerequisites: Python 3.12+ (tested on Python 3.13) and SQLite / PostgreSQL.
 
 ```bash
 cd backend
+python -m venv venv
+# Windows:
+.\venv\Scripts\activate
+# Linux/macOS:
+source venv/bin/activate
+
+pip install -r requirements.txt   # or django djangorestframework djangorestframework-simplejwt django-cors-headers pytest pytest-django factory_boy
 python manage.py migrate
 python manage.py seed_demo --reset
+python manage.py runserver 8000
 ```
 
-### 2. Demo Logins
-All accounts share the password: `Brightloop@123`
-- **Admin**: `admin@brightloop.test`
-- **Staff**: `staff1@brightloop.test`, `staff2@brightloop.test`, `staff3@brightloop.test`
-- **Customer**: `customer1@brightloop.test` ... `customer200@brightloop.test`
+> **Note on Seeding**: `python manage.py seed_demo --reset` populates:
+> - Tiered plans, products, taxes (GST 18%, VAT 5%), and discount rules
+> - 5,000 subscriptions and 12 months of historical billing/payment records
+> - Exactly 40 subscriptions due for billing today, ready for the live demo run.
+
+### 2. Frontend Setup
+
+Prerequisites: Node.js 18+ and npm / pnpm.
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+The frontend will run on `http://localhost:5173` (configured to proxy requests to `http://localhost:8000`).
+
+### 3. Docker (Optional DB)
+
+To spin up a local PostgreSQL 16 container instead of SQLite:
+```bash
+docker compose up -d db
+```
 
 ---
 
-## 🏛️ Billing Architecture & Design Decisions (Amrutha / P2)
+## Demo Accounts
 
-### 1. Money & Numerical Precision
-- **Decimal Everywhere**: All currency and pricing calculations use Python's `Decimal` with `ROUND_HALF_UP` rounded to 2 decimal places (`Decimal('0.01')`). Floats are never used to eliminate binary floating point drift.
-- **Snapshot Pricing**: Subscription lines snapshot unit prices at creation time. Invoice lines snapshot unit price, applicable tax rate, and computed discount amount at billing run time. Future price or tax rate modifications never mutate historical invoices.
+All seeded demo accounts share the password: `Brightloop@123`
 
-### 2. Idempotent Billing Engine (`run_billing`)
-- **Database Unique Constraint**: `UniqueConstraint(fields=['subscription', 'period_start'])` enforces at the database level that no period can ever be billed twice.
-- **Atomic Operations & Row Locking**: Each subscription is evaluated in an isolated `transaction.atomic()` block with `select_for_update(skip_locked=True)` (or `select_for_update()` in SQLite). If an unexpected exception occurs on one subscription, it rolls back that subscription only and does not impact others.
-- **Sequential Numbering**: `next_invoice_number()` uses a locked counter table (`InvoiceSequence`) with `select_for_update` to guarantee gapless, concurrency-safe sequential identifiers (`INV-00001`, `INV-00002`).
-- **Catch-up Billing**: If a cron job or scheduled execution runs late and misses multiple billing periods, the engine catches up each missed period in chronological order until `next_billing_date > as_of`.
-- **Month-End Clamping**: `add_period` automatically clamps to the last valid calendar day (e.g. 31 Jan + 1 month -> 28/29 Feb, preserving consistent billing cycles).
-- **Auto-Close Expiry**: Subscriptions on plans with `auto_close=True` are automatically transitioned to `closed` when `next_billing_date > expiry_date`, creating no invoices beyond expiry.
-
-### 3. Smart Discounts Engine
-- **Admin-Governed**: Discount configuration endpoints (`/api/discounts/`) are strictly restricted to Admin users (`403` for staff and customers).
-- **Automatic Auto-Apply**: At invoice generation, `find_eligible_discounts` evaluates validity date windows, minimum purchase amounts, minimum quantities, remaining usage limits (`times_used < usage_limit`), and product/subscription scopes.
-- **Single Best Discount**: Applies the single best discount that maximizes customer savings.
-- **Atomic Usage Tracking**: `DiscountUsage` records and `times_used` increments are committed in the same database transaction as invoice creation.
-
-### 4. Payments, Overdue & Security
-- **Concurrency Protection**: Payment processing locks the invoice row with `select_for_update` to prevent race conditions from duplicate simultaneous payments.
-- **Overpayment Prevention**: Payments exceeding the current outstanding balance (`total - amount_paid`) are rejected with a clear validation error.
-- **State Machine Integrity**: Status transitions are strictly enforced (`draft` -> `confirmed` -> `paid`). Invoices can only move to `paid` when sum of recorded payments matches or exceeds `total`. Paid invoices cannot be cancelled.
-- **Customer Query Isolation**: Customers can only view and access their own subscriptions and invoices (enforced via database querysets at `/api/invoices/`, returning `404` for unauthorized IDs).
+| Role | Username / Email | Access Scope |
+|---|---|---|
+| **Admin** | `admin@brightloop.test` | System settings, tax configuration, discounts management, staff & plan admin |
+| **Staff** | `staff1@brightloop.test`<br>`staff2@brightloop.test`<br>`staff3@brightloop.test` | Operations, customer management, manual/cron billing runs, invoice issuance, recording payments |
+| **Customer** | `customer1@brightloop.test`<br>... `customer200@brightloop.test` | Customer Portal: viewing active subscriptions, downloading invoice PDFs/HTML, reviewing payment history |
 
 ---
 
-## 🎯 2-Minute Demo Script
+## Core System Architecture
 
-1. **Admin Discount & Tax Rule**:
-   - Admin creates a 10% discount for 5+ seats and an active 18% GST rule.
-2. **Click "Run Billing"**:
-   - Summary displays **40 created**.
-   - Click "Run Billing" immediately again: summary displays **0 created**, demonstrating live idempotency.
-3. **Open Fresh Invoice**:
-   - Verify line items, 18% GST tax calculation, and the 10% discount prefilled automatically.
-   - Click **Confirm**, **Send**, and **Print** (clean print stylesheet preview).
-4. **Record Payment**:
-   - Record a partial payment: balance decreases, status remains `confirmed`.
-   - Record the remainder: balance hits `0.00`, status flips automatically to `paid`.
-5. **Overdue Invoices**:
-   - View overdue invoices table (highlighted in red with days overdue computed).
-6. **Discount Safety**:
-   - Show that expired discounts and limit-reached discounts were automatically skipped.
+```
+                  ┌──────────────────────────────────────────────┐
+                  │          React Frontend (Vite + TS)          │
+                  │  Staff Console  │  Admin Ops  │ Cust Portal  │
+                  └───────────────────────┬──────────────────────┘
+                                          │ JWT Authenticated REST
+                                          ▼
+┌────────────────────────────────────────────────────────────────────────┐
+│                        Django REST Framework Core                      │
+├─────────────────┬───────────────────┬─────────────────┬────────────────┤
+│    accounts     │   subscriptions   │     billing     │    payments    │
+│  Custom User    │  Plans, Products  │ Invoicing Engine│  Transactions  │
+│  RBAC & Tokens  │  Contract Cycles  │ Tax & Discounts │  Row Locks     │
+└─────────────────┴───────────────────┴─────────────────┴────────────────┘
+```
 
----
+### Module Breakdown
 
-## 🎤 Q&A Answers Reference
-
-| Question | Answer |
-|---|---|
-| **How do you prevent double billing?** | Database unique constraint on `(subscription, period_start)` plus `get_or_create`. The billing date advances only after invoice creation in the same transaction. Demo: click Run Billing twice. |
-| **What if the job runs late or fails halfway?** | Each subscription bills in its own atomic transaction so failures affect only that row. A late run catches up all missed periods chronologically. |
-| **How is tax calculated and stored?** | Per line from admin rules, applied after discount, rounded half-up to 2 places. The rate and amount are snapshotted on the invoice line so future rate adjustments never alter historical invoices. |
-| **Why Decimal and not float?** | Floats cause binary rounding drift (such as `0.1 + 0.2 != 0.3`). Money operations require exact base-10 `Decimal` arithmetic with `ROUND_HALF_UP`. |
-| **What stops overpayment?** | The invoice row is locked with `select_for_update` and the proposed amount is checked against `balance` inside the transaction. |
-| **What is overdue?** | An invoice with `status='confirmed'`, `due_date < today`, and `balance > 0`. |
-| **How would this scale to millions of subscriptions?** | Decouple `run_billing` into Celery background workers partitioned by customer ID ranges; the DB unique constraint ensures idempotency even during worker retries. |
+- **`accounts`**: Role-based authentication (`admin`, `staff`, `customer`) using JWTs, registration, password reset flows, and tenant/customer profile associations.
+- **`plans` & `catalog`**: Configurable billing cadences (monthly, quarterly, annual), line items, base pricing, and automated tax rule resolution (`resolve_tax`).
+- **`subscriptions`**: Subscription lifecycles (`draft`, `active`, `paused`, `closed`), auto-close rules on plan expiry, and automated next-billing-date calculators with month-end date clamping.
+- **`discounts`**: Rule-based discount engine supporting percent/fixed amounts, validity windows, min spend/quantity checks, usage thresholds, and auto-apply priority logic.
+- **`billing`**: Idempotent billing run engine (`run_billing`), line-level price/tax/discount snapshots, chronological catch-up billing, sequential numbering (`INV-00001`), and printable invoice previews.
+- **`payments`**: Concurrency-safe payment recording with database row locking (`select_for_update`), overpayment guards, overdue tracking, and automated invoice status transitions (`paid`, `partially_paid`).
+- **`reports`**: MRR (Monthly Recurring Revenue), ARR, churn metrics, and revenue analytics.
 
 ---
 
-## 🧪 Testing & Verification
+## Key Engineering Decisions
 
-Run the entire test suite:
+### 1. Decimal Precision Throughout
+All currency, prices, taxes, and discounts use Python's `Decimal` with `ROUND_HALF_UP` quantized to 2 decimal places. Floating-point numbers are strictly prohibited across models and business logic to eliminate rounding drift.
+
+### 2. Snapshot Pricing
+When an invoice is generated, the line items snapshot the product unit price, applied tax rate, and computed discount amount at that exact moment. Modifying a product's price or changing a tax rate in the admin panel later will never alter previously issued invoices.
+
+### 3. Idempotent Billing Engine
+The billing generator is completely safe to run multiple times:
+- Enforced at the database level using a `UniqueConstraint(fields=['subscription', 'period_start'])`.
+- Each subscription is processed inside an isolated transaction with row locking (`select_for_update`).
+- Sequential invoice numbering uses a dedicated atomic counter table (`InvoiceSequence`) to ensure no numbers are skipped during concurrency.
+- If a scheduler skips a cycle or runs late, the engine calculates each missed period sequentially in chronological order.
+
+### 4. Overpayment & Concurrency Defense
+When recording a payment:
+- The target invoice is locked with `select_for_update` to prevent concurrent race conditions.
+- Incoming payments are validated against `total - amount_paid`. Any attempt to record an amount exceeding the remaining balance is rejected.
+- Invoice states advance strictly based on ledger math: full payment flips the invoice to `paid`, while partial payments leave it in `confirmed` with an updated balance.
+
+---
+
+## 2-Minute Judge Walkthrough
+
+1. **Admin Configurations (`/admin/taxes`, `/admin/discounts`)**:
+   - Log in as `admin@brightloop.test`.
+   - Show the active GST tax rule (18%) and an auto-apply discount rule (10% off for subscriptions with 5+ seats).
+2. **Execute Billing Run (`/staff/billing-run`)**:
+   - Log in as `staff1@brightloop.test`.
+   - Select today's date and click **Run Billing**.
+   - Notice the toast / summary: **40 invoices created**.
+   - Click **Run Billing** a second time immediately: **0 invoices created**, proving idempotency.
+3. **Inspect Generated Invoice (`/staff/invoices`)**:
+   - Open any newly generated invoice.
+   - Show the snapshotted line items, applied discount, tax breakdown, and status (`confirmed`).
+   - Click **Print / Preview** to see the clean, printable HTML view.
+4. **Record Payment (`/staff/invoices/:id`)**:
+   - Open a confirmed invoice with an open balance.
+   - Record a partial payment: see the remaining balance decrease while the status remains `confirmed`.
+   - Record the exact remaining balance: watch the invoice status switch to `paid`.
+   - Try entering an amount greater than the balance to show the built-in overpayment prevention.
+5. **Customer Self-Service Portal (`/portal/invoices`)**:
+   - Log in as `customer1@brightloop.test`.
+   - Demonstrate that customer isolation is enforced: customers can only view and download their own subscription invoices.
+
+---
+
+## Test Suite
+
+The test suite covers unit, integration, permission, and concurrency test cases across all modules.
+
 ```bash
 cd backend
 python -m pytest
 ```
 
-All 27 must-pass tests from Section 5 of the build guide pass with 100% coverage.
+All 156 tests run against the SQLite test database (or PostgreSQL if configured), verifying:
+- All 27 core billing engine specifications (tax snapshoting, month-end date math, overpayment protection, auto-apply discounts).
+- RBAC permissions on admin, staff, and customer portal endpoints.
+- High-volume demo seeding and query performance.
