@@ -5,6 +5,10 @@ from accounts.views import StaffListCreateView
 from plans.views import QuotationTemplateListCreateView, QuotationTemplateDetailView
 from subscriptions.views import CreateSubscriptionFromTemplateView
 
+admin.site.site_header = "Brightloop Odoo Subscription Management"
+admin.site.site_title = "Brightloop Admin Portal"
+admin.site.index_title = "Subscription & Billing System Administration"
+
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/health', HealthCheckView.as_view(), name='health-check'),
