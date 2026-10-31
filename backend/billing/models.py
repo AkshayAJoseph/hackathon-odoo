@@ -5,6 +5,13 @@ from datetime import date
 from subscriptions.models import Subscription
 from catalog.models import Product
 
+class InvoiceSequence(models.Model):
+    name = models.CharField(max_length=50, unique=True, default='invoice')
+    last_number = models.PositiveIntegerField(default=0)
+
+    def __str__(self):
+        return f"{self.name}: {self.last_number}"
+
 class Invoice(models.Model):
     STATUS_CHOICES = (
         ('draft', 'Draft'),
