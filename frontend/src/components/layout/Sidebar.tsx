@@ -74,6 +74,7 @@ export const Sidebar: React.FC = () => {
           { name: 'Dashboard', to: '/dashboard', icon: LayoutDashboard },
           { name: 'Subscriptions', to: '/staff/subscriptions', icon: FileSpreadsheet },
           { name: 'Invoices', to: '/staff/invoices', icon: CreditCard },
+          { name: 'Payments', to: '/staff/payments', icon: CreditCard },
           { name: 'Customers', to: '/staff/customers', icon: Users },
           { name: 'Quotation Templates', to: '/staff/templates', icon: FileText },
           { name: 'Run Billing Engine', to: '/staff/billing', icon: PlayCircle },

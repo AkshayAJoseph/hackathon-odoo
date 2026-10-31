@@ -25,6 +25,7 @@ import { InvoicesListPage } from '@/pages/staff/InvoicesListPage';
 import { CustomersPage } from '@/pages/staff/CustomersPage';
 import { TemplatesPage } from '@/pages/staff/TemplatesPage';
 import { BillingRunPage } from '@/pages/staff/BillingRunPage';
+import { PaymentsListPage } from '@/pages/staff/PaymentsListPage';
 
 // Customer Portal pages
 import { CustomerSubscriptionsPage } from '@/pages/portal/CustomerSubscriptionsPage';
@@ -166,7 +167,15 @@ export const App: React.FC = () => {
                   <BillingRunPage />
                 </ProtectedRoute>
               }
-            />
+                            />
+                <Route
+                  path="/staff/payments"
+                  element={
+                    <ProtectedRoute roles={['admin', 'staff']}>
+                      <PaymentsListPage />
+                    </ProtectedRoute>
+                  }
+                />
 
             {/* Customer Portal routes */}
             <Route
