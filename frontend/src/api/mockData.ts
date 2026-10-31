@@ -352,3 +352,74 @@ export const MOCK_INVOICES: Invoice[] = [
     ],
   },
 ];
+
+/** Add a new product to the in‑memory mock store. */
+export function addMockProduct(
+  payload: Omit<Product, 'id' | 'variants'>
+): Product {
+  const nextId = MOCK_PRODUCTS.length ? Math.max(...MOCK_PRODUCTS.map(p => p.id)) + 1 : 1;
+  const newProduct: Product = {
+    id: nextId,
+    variants: [],
+    ...payload,
+  };
+  MOCK_PRODUCTS.push(newProduct);
+  return newProduct;
+}
+
+/** Add a new variant to a product in the mock store. */
+export function addMockVariant(
+  productId: number,
+  payload: Omit<ProductVariant, 'id' | 'product_id'>
+): ProductVariant {
+  const product = MOCK_PRODUCTS.find(p => p.id === productId);
+  if (!product) {
+    throw new Error(`Product with id ${productId} not found`);
+  }
+  const allVariantIds = MOCK_PRODUCTS.flatMap(p => p.variants.map(v => v.id));
+  const nextId = allVariantIds.length ? Math.max(...allVariantIds) + 1 : 1;
+  const newVariant: ProductVariant = {
+    id: nextId,
+    product_id: productId,
+    ...payload,
+  };
+  product.variants.push(newVariant);
+  return newVariant;
+}
+
+/** Add a new plan to the mock store. */
+export function addMockPlan(payload: Omit<Plan, 'id'>): Plan {
+  const nextId = MOCK_PLANS.length ? Math.max(...MOCK_PLANS.map(p => p.id)) + 1 : 1;
+  const newPlan: Plan = { id: nextId, ...payload };
+  MOCK_PLANS.push(newPlan);
+  return newPlan;
+}
+
+/** Add a new tax rule to the mock store. */
+export function addMockTax(payload: Omit<Tax, 'id'>): Tax {
+  const nextId = MOCK_TAXES.length ? Math.max(...MOCK_TAXES.map(t => t.id)) + 1 : 1;
+  const newTax: Tax = { id: nextId, ...payload };
+  MOCK_TAXES.push(newTax);
+  return newTax;
+}
+
+/** Add a new discount rule to the mock store. */
+export function addMockDiscount(payload: Omit<Discount, 'id' | 'used_count'>): Discount {
+  const nextId = MOCK_DISCOUNTS.length ? Math.max(...MOCK_DISCOUNTS.map(d => d.id)) + 1 : 1;
+  const newDiscount: Discount = { id: nextId, used_count: 0, ...payload };
+  MOCK_DISCOUNTS.push(newDiscount);
+  return newDiscount;
+}
+
+/** Add a new staff user (non‑admin) to the mock store. */
+export function addMockStaff(payload: Omit<User, 'id' | 'role'> & { role?: User['role'] }): User {
+  const nextId = Object.values(MOCK_USERS).reduce((max, u) => Math.max(max, u.id), 0) + 1;
+  const newUser: User = {
+    id: nextId,
+    role: 'staff',
+    ...payload,
+  };
+  // store under a dynamic key e.g., `staff${nextId}`
+  (MOCK_USERS as any)[`staff${nextId}`] = newUser;
+  return newUser;
+}

@@ -7,6 +7,8 @@ import {
   MOCK_SUBSCRIPTIONS,
   MOCK_INVOICES,
   User,
+  addMockProduct,
+  addMockVariant,
 } from './mockData';
 
 export interface ApiResponse<T = unknown> {
@@ -287,14 +289,42 @@ class ApiClient {
       return (MOCK_USERS[role] || MOCK_USERS.admin) as T;
     }
 
-    // /products/
+// /products/
     if (endpoint.includes('/products')) {
-      return {
-        count: MOCK_PRODUCTS.length,
-        next: null,
-        previous: null,
-        results: MOCK_PRODUCTS,
-      } as T;
+      if (method === 'GET') {
+        return {
+          count: MOCK_PRODUCTS.length,
+          next: null,
+          previous: null,
+          results: MOCK_PRODUCTS,
+        } as T;
+      }
+      // POST /products/ to create a new product
+      if (method === 'POST') {
+        const body = options.body ? JSON.parse(options.body as string) : {};
+        const newProduct = addMockProduct({
+          name: body.name || '',
+          type: body.type || 'service',
+          sales_price: body.sales_price || '0.00',
+          cost_price: body.cost_price || '0.00',
+          notes: body.notes || '',
+          is_active: body.is_active ?? true,
+        });
+        return newProduct as unknown as T;
+      }
+      // POST /products/:id/variants/ to add a variant
+      const variantMatch = endpoint.match(/\/products\/(\d+)\/variants\//);
+      if (method === 'POST' && variantMatch) {
+        const productId = Number(variantMatch[1]);
+        const body = options.body ? JSON.parse(options.body as string) : {};
+        const newVariant = addMockVariant(productId, {
+          attribute: body.attribute || '',
+          value: body.value || '',
+          extra_price: body.extra_price || '0.00',
+        });
+        return newVariant as unknown as T;
+      }
+      return {} as T;
     }
 
     // /plans/
