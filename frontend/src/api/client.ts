@@ -7,6 +7,8 @@ import {
   MOCK_SUBSCRIPTIONS,
   MOCK_INVOICES,
   User,
+  addMockProduct,
+  addMockVariant,
 } from './mockData';
 
 export interface ApiResponse<T = unknown> {
@@ -233,21 +235,51 @@ class ApiClient {
         access: `mock-jwt-access-${role}`,
         refresh: `mock-jwt-refresh-${role}`,
         user,
+        role: user.role,
+        name: user.name,
       } as T;
     }
 
     // /auth/signup/
     if (endpoint.includes('/auth/signup') && method === 'POST') {
       const body = options.body ? JSON.parse(options.body as string) : {};
+      const newUser: User = {
+        id: 99,
+        email: body.email || 'newuser@client.com',
+        name: body.name || 'New Customer',
+        role: 'customer',
+        company: body.company,
+      };
       return {
         access: 'mock-jwt-access-customer',
         refresh: 'mock-jwt-refresh-customer',
-        user: {
-          id: 99,
-          email: body.email || 'newuser@client.com',
-          name: body.name || 'New Customer',
-          role: 'customer',
-        },
+        user: newUser,
+        role: 'customer',
+        name: newUser.name,
+      } as T;
+    }
+
+    // /auth/forgot/
+    if (endpoint.includes('/auth/forgot') && method === 'POST') {
+      return {
+        message: 'If the account exists, a link was sent. The link expires in 30 minutes.',
+        detail: 'If the account exists, a link was sent. The link expires in 30 minutes.',
+      } as T;
+    }
+
+    // /auth/reset/
+    if (endpoint.includes('/auth/reset') && method === 'POST') {
+      const body = options.body ? JSON.parse(options.body as string) : {};
+      if (!body.uid || !body.token) {
+        throw {
+          status: 400,
+          data: { detail: 'This password reset link is invalid or has expired (30-min window).' },
+          message: 'Bad Request',
+        };
+      }
+      return {
+        message: 'Password reset successful.',
+        detail: 'Password reset successful.',
       } as T;
     }
 
@@ -257,14 +289,42 @@ class ApiClient {
       return (MOCK_USERS[role] || MOCK_USERS.admin) as T;
     }
 
-    // /products/
+// /products/
     if (endpoint.includes('/products')) {
-      return {
-        count: MOCK_PRODUCTS.length,
-        next: null,
-        previous: null,
-        results: MOCK_PRODUCTS,
-      } as T;
+      if (method === 'GET') {
+        return {
+          count: MOCK_PRODUCTS.length,
+          next: null,
+          previous: null,
+          results: MOCK_PRODUCTS,
+        } as T;
+      }
+      // POST /products/ to create a new product
+      if (method === 'POST') {
+        const body = options.body ? JSON.parse(options.body as string) : {};
+        const newProduct = addMockProduct({
+          name: body.name || '',
+          type: body.type || 'service',
+          sales_price: body.sales_price || '0.00',
+          cost_price: body.cost_price || '0.00',
+          notes: body.notes || '',
+          is_active: body.is_active ?? true,
+        });
+        return newProduct as unknown as T;
+      }
+      // POST /products/:id/variants/ to add a variant
+      const variantMatch = endpoint.match(/\/products\/(\d+)\/variants\//);
+      if (method === 'POST' && variantMatch) {
+        const productId = Number(variantMatch[1]);
+        const body = options.body ? JSON.parse(options.body as string) : {};
+        const newVariant = addMockVariant(productId, {
+          attribute: body.attribute || '',
+          value: body.value || '',
+          extra_price: body.extra_price || '0.00',
+        });
+        return newVariant as unknown as T;
+      }
+      return {} as T;
     }
 
     // /plans/

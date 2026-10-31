@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { Check, X, ArrowRight, Lock, CheckCircle2 } from 'lucide-react';
+import { apiClient } from '@/api';
+import { PasswordHints, evaluatePassword } from '@/components';
+import { ArrowRight, Lock, CheckCircle2, AlertCircle, Loader2, RefreshCw } from 'lucide-react';
 
 export const ResetPasswordPage: React.FC = () => {
   const { uid, token } = useParams<{ uid: string; token: string }>();
@@ -11,29 +13,52 @@ export const ResetPasswordPage: React.FC = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const navigate = useNavigate();
 
-  // Rules matching SPEC 5.1 & 5.2
-  const ruleLength = password.length > 8;
-  const ruleUpper = /[A-Z]/.test(password);
-  const ruleLower = /[a-z]/.test(password);
-  const ruleSpecial = /[^a-zA-Z0-9]/.test(password);
-  const passwordsMatch = password.length > 0 && password === confirmPassword;
-  const isPasswordValid = ruleLength && ruleUpper && ruleLower && ruleSpecial && passwordsMatch;
+  const isTokenMissing = !uid || !token;
+
+  // Evaluate password rules including confirmation match
+  const { isValid: isPasswordValid } = evaluatePassword(password, confirmPassword);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!isPasswordValid) return;
+    if (isTokenMissing) {
+      setError('Cannot reset password: Token or User ID is missing from URL.');
+      return;
+    }
+
+    if (!isPasswordValid) {
+      if (password !== confirmPassword) {
+        setError('Passwords do not match.');
+      } else {
+        setError('Please satisfy all password requirements before proceeding.');
+      }
+      return;
+    }
 
     setError('');
     setIsSubmitting(true);
     try {
-      // Simulate/call reset API with uid and token
-      await new Promise((r) => setTimeout(r, 400));
+      // Connect to backend reset-password endpoint
+      await apiClient.post('/auth/reset/', {
+        uid,
+        token,
+        new_password: password,
+        password,
+      });
+
       setSuccess(true);
       setTimeout(() => {
         navigate('/login');
       }, 2000);
-    } catch {
-      setError('This password reset link is invalid or has expired (30-min window).');
+    } catch (err: any) {
+      const errorMsg =
+        err?.data?.detail ||
+        err?.data?.token?.[0] ||
+        err?.data?.new_password?.[0] ||
+        err?.data?.password?.[0] ||
+        err?.data?.non_field_errors?.[0] ||
+        err?.message ||
+        'This password reset link is invalid or has expired (links are single-use and expire after 30 minutes).';
+      setError(errorMsg);
     } finally {
       setIsSubmitting(false);
     }
@@ -50,9 +75,15 @@ export const ResetPasswordPage: React.FC = () => {
         <h2 className="mt-4 text-center text-3xl font-extrabold text-slate-900 tracking-tight">
           Reset Your Password
         </h2>
-        <p className="mt-2 text-center text-xs text-slate-500 font-mono">
-          Token: {token?.substring(0, 10)}... | UID: {uid}
-        </p>
+        {token && uid ? (
+          <p className="mt-2 text-center text-xs text-slate-500 font-mono">
+            Token: {token.length > 12 ? `${token.substring(0, 10)}...` : token} | UID: {uid}
+          </p>
+        ) : (
+          <p className="mt-2 text-center text-xs text-rose-500 font-medium">
+            Reset token missing or malformed
+          </p>
+        )}
       </div>
 
       <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
@@ -64,24 +95,58 @@ export const ResetPasswordPage: React.FC = () => {
               </div>
               <h3 className="text-base font-semibold text-slate-900">Password Reset Successful</h3>
               <p className="text-sm text-slate-600">
-                Your password has been updated. Redirecting you to login...
+                Your password has been updated securely. Redirecting you to login...
               </p>
-              <Link to="/login" className="inline-block text-xs font-semibold text-indigo-600 underline">
-                Click here if not redirected automatically
-              </Link>
+              <div className="pt-2">
+                <Link
+                  to="/login"
+                  className="inline-flex items-center text-xs font-semibold text-indigo-600 hover:text-indigo-500 underline"
+                >
+                  Click here if not redirected automatically
+                </Link>
+              </div>
             </div>
           ) : (
             <>
+              {isTokenMissing && (
+                <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800 space-y-2">
+                  <div className="flex items-start gap-2">
+                    <AlertCircle className="w-4 h-4 text-amber-600 mt-0.5 shrink-0" />
+                    <span>This reset link is missing required security tokens.</span>
+                  </div>
+                  <Link
+                    to="/forgot"
+                    className="inline-flex items-center text-xs font-semibold text-amber-900 underline"
+                  >
+                    Request a new password reset link
+                  </Link>
+                </div>
+              )}
+
               {error && (
-                <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-600">
-                  {error}
+                <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700 space-y-2">
+                  <div className="flex items-start gap-2">
+                    <AlertCircle className="w-4 h-4 text-red-500 mt-0.5 shrink-0" />
+                    <span>{error}</span>
+                  </div>
+                  {error.toLowerCase().includes('expired') || error.toLowerCase().includes('invalid') ? (
+                    <div className="pt-1">
+                      <Link
+                        to="/forgot"
+                        className="inline-flex items-center gap-1 text-xs font-semibold text-red-800 underline"
+                      >
+                        <RefreshCw className="w-3 h-3" />
+                        <span>Request a fresh reset link</span>
+                      </Link>
+                    </div>
+                  ) : null}
                 </div>
               )}
 
               <form className="space-y-4" onSubmit={handleSubmit}>
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wide">
-                    New Password
+                    New Password <span className="text-red-500">*</span>
                   </label>
                   <div className="mt-1 relative rounded-md shadow-xs">
                     <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
@@ -90,17 +155,18 @@ export const ResetPasswordPage: React.FC = () => {
                     <input
                       type="password"
                       required
+                      disabled={isSubmitting || isTokenMissing}
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
-                      className="block w-full pl-9 pr-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-hidden focus:ring-2 focus:ring-indigo-600"
-                      placeholder="•••••••••"
+                      className="block w-full pl-9 pr-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-hidden focus:ring-2 focus:ring-indigo-600 disabled:bg-slate-50 disabled:text-slate-500"
+                      placeholder="Min 9 chars, 1 uppercase, 1 lowercase, 1 special"
                     />
                   </div>
                 </div>
 
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wide">
-                    Confirm New Password
+                    Confirm New Password <span className="text-red-500">*</span>
                   </label>
                   <div className="mt-1 relative rounded-md shadow-xs">
                     <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
@@ -109,51 +175,49 @@ export const ResetPasswordPage: React.FC = () => {
                     <input
                       type="password"
                       required
+                      disabled={isSubmitting || isTokenMissing}
                       value={confirmPassword}
                       onChange={(e) => setConfirmPassword(e.target.value)}
-                      className="block w-full pl-9 pr-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-hidden focus:ring-2 focus:ring-indigo-600"
-                      placeholder="•••••••••"
+                      className="block w-full pl-9 pr-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-hidden focus:ring-2 focus:ring-indigo-600 disabled:bg-slate-50 disabled:text-slate-500"
+                      placeholder="Re-enter new password"
                     />
                   </div>
                 </div>
 
-                {/* Validation rules */}
-                <div className="mt-3 p-3 bg-slate-50 border border-slate-200 rounded-lg space-y-1.5 text-xs">
-                  <div className={`flex items-center gap-1.5 ${ruleLength ? 'text-emerald-700' : 'text-slate-500'}`}>
-                    {ruleLength ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <X className="w-3.5 h-3.5 text-slate-400" />}
-                    <span>More than 8 characters (at least 9)</span>
-                  </div>
-                  <div className={`flex items-center gap-1.5 ${ruleUpper ? 'text-emerald-700' : 'text-slate-500'}`}>
-                    {ruleUpper ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <X className="w-3.5 h-3.5 text-slate-400" />}
-                    <span>At least one uppercase letter (A-Z)</span>
-                  </div>
-                  <div className={`flex items-center gap-1.5 ${ruleLower ? 'text-emerald-700' : 'text-slate-500'}`}>
-                    {ruleLower ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <X className="w-3.5 h-3.5 text-slate-400" />}
-                    <span>At least one lowercase letter (a-z)</span>
-                  </div>
-                  <div className={`flex items-center gap-1.5 ${ruleSpecial ? 'text-emerald-700' : 'text-slate-500'}`}>
-                    {ruleSpecial ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <X className="w-3.5 h-3.5 text-slate-400" />}
-                    <span>At least one special character (!@#$%^&*...)</span>
-                  </div>
-                  <div className={`flex items-center gap-1.5 ${passwordsMatch ? 'text-emerald-700' : 'text-slate-500'}`}>
-                    {passwordsMatch ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <X className="w-3.5 h-3.5 text-slate-400" />}
-                    <span>Passwords match</span>
-                  </div>
+                {/* Live Password Hints checklist */}
+                <div className="mt-3">
+                  <PasswordHints password={password} confirmPassword={confirmPassword} />
                 </div>
 
                 <button
                   type="submit"
-                  disabled={!isPasswordValid || isSubmitting}
+                  disabled={!isPasswordValid || isSubmitting || isTokenMissing}
                   className={`w-full flex justify-center items-center gap-2 py-2.5 px-4 border border-transparent rounded-lg shadow-sm text-sm font-semibold text-white transition-colors ${
-                    isPasswordValid && !isSubmitting
+                    isPasswordValid && !isSubmitting && !isTokenMissing
                       ? 'bg-indigo-600 hover:bg-indigo-700 focus:outline-hidden focus:ring-2 focus:ring-indigo-500'
                       : 'bg-slate-300 cursor-not-allowed text-slate-500'
                   }`}
                 >
-                  <span>{isSubmitting ? 'Resetting...' : 'Update Password'}</span>
-                  <ArrowRight className="w-4 h-4" />
+                  {isSubmitting ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Updating Password...</span>
+                    </>
+                  ) : (
+                    <>
+                      <span>Update Password</span>
+                      <ArrowRight className="w-4 h-4" />
+                    </>
+                  )}
                 </button>
               </form>
+
+              <div className="mt-6 text-center text-xs text-slate-500">
+                Remembered your credentials?{' '}
+                <Link to="/login" className="text-indigo-600 font-semibold hover:underline">
+                  Sign in
+                </Link>
+              </div>
             </>
           )}
         </div>
@@ -161,3 +225,4 @@ export const ResetPasswordPage: React.FC = () => {
     </div>
   );
 };
+
