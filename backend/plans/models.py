@@ -1,44 +1,71 @@
-from django.db import models
 from decimal import Decimal
-from catalog.models import Product, ProductVariant
+from django.db import models
+from django.core.exceptions import ValidationError
+
 
 class Plan(models.Model):
-    PERIOD_CHOICES = (
+    BILLING_PERIOD_CHOICES = (
         ('daily', 'Daily'),
         ('weekly', 'Weekly'),
         ('monthly', 'Monthly'),
         ('yearly', 'Yearly'),
     )
+
     name = models.CharField(max_length=255)
     price = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))
-    billing_period = models.CharField(max_length=20, choices=PERIOD_CHOICES, default='monthly')
+    billing_period = models.CharField(max_length=20, choices=BILLING_PERIOD_CHOICES, default='monthly')
     min_quantity = models.PositiveIntegerField(default=1)
     available_from = models.DateField(null=True, blank=True)
     available_to = models.DateField(null=True, blank=True)
-
-    # Per-plan admin flags
     auto_close = models.BooleanField(default=False)
     closable = models.BooleanField(default=True)
     pausable = models.BooleanField(default=True)
     renewable = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['name']
+
+    def clean(self):
+        if self.available_from and self.available_to:
+            if self.available_to < self.available_from:
+                raise ValidationError({
+                    'available_to': "available_to date must be greater than or equal to available_from date."
+                })
+
+    def save(self, *args, **kwargs):
+        self.clean()
+        super().save(*args, **kwargs)
 
     def __str__(self):
-        return f"{self.name} ({self.billing_period})"
+        return f"{self.name} (${self.price} / {self.billing_period})"
+
 
 class QuotationTemplate(models.Model):
     name = models.CharField(max_length=255)
-    plan = models.ForeignKey(Plan, on_delete=models.CASCADE, related_name='templates')
+    plan = models.ForeignKey(Plan, on_delete=models.PROTECT, related_name='templates')
     validity_days = models.PositiveIntegerField(default=30)
-    notes = models.TextField(blank=True)
+    notes = models.TextField(blank=True, default='')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['name']
 
     def __str__(self):
-        return self.name
+        return f"{self.name} (Plan: {self.plan.name})"
+
 
 class TemplateLine(models.Model):
     template = models.ForeignKey(QuotationTemplate, on_delete=models.CASCADE, related_name='lines')
-    product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name='template_lines')
-    variant = models.ForeignKey(ProductVariant, on_delete=models.SET_NULL, null=True, blank=True, related_name='template_lines')
+    product = models.ForeignKey('catalog.Product', on_delete=models.PROTECT, related_name='template_lines')
+    variant = models.ForeignKey('catalog.ProductVariant', on_delete=models.SET_NULL, null=True, blank=True, related_name='template_lines')
     quantity = models.PositiveIntegerField(default=1)
 
+    class Meta:
+        ordering = ['id']
+
     def __str__(self):
-        return f"{self.product.name} x {self.quantity}"
+        v = f" ({self.variant.value})" if self.variant else ""
+        return f"{self.quantity}x {self.product.name}{v}"
