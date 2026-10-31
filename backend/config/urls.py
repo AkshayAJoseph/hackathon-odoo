@@ -1,11 +1,15 @@
 from django.contrib import admin
 from django.urls import path, include
 from core.views import HealthCheckView
+from accounts.views import StaffListCreateView
 
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/health', HealthCheckView.as_view(), name='health-check'),
     path('api/health/', HealthCheckView.as_view(), name='health-check-slash'),
+    path('api/auth/', include('accounts.urls')),
+    path('api/staff', StaffListCreateView.as_view(), name='staff-list-create'),
+    path('api/staff/', StaffListCreateView.as_view(), name='staff-list-create-slash'),
     path('api/taxes/', include('catalog.urls_tax')),
     path('api/discounts/', include('discounts.urls')),
     path('api/billing/', include('billing.urls')),
