@@ -15,7 +15,7 @@ User = get_user_model()
 @pytest.mark.django_db
 class TestAuditLogAndTransition:
     def test_create_audit_log_with_actor(self):
-        user = User.objects.create_user(username='tester', email='tester@brightloop.com')
+        user = User.objects.create_user(email='tester@brightloop.com', name='Tester User')
         log = log_transition(
             actor=user,
             entity='Subscription',
@@ -49,7 +49,7 @@ class TestAuditLogAndTransition:
 @pytest.mark.django_db
 class TestScopedQueryset:
     def test_anonymous_user_gets_none(self):
-        user = User.objects.create_user(username='admin_u', email='admin@brightloop.com')
+        user = User.objects.create_user(email='admin@brightloop.com', name='Admin User')
         log_transition(actor=user, entity='Subscription', entity_id='1', from_status='draft', to_status='active')
         
         anon = AnonymousUser()
@@ -57,8 +57,8 @@ class TestScopedQueryset:
         assert qs.count() == 0
 
     def test_admin_and_staff_see_all(self):
-        user1 = User.objects.create_user(username='u1', email='u1@brightloop.com')
-        user2 = User.objects.create_user(username='u2', email='u2@brightloop.com')
+        user1 = User.objects.create_user(email='u1@brightloop.com', name='User One')
+        user2 = User.objects.create_user(email='u2@brightloop.com', name='User Two')
         log_transition(actor=user1, entity='Subscription', entity_id='1', from_status='draft', to_status='active')
         log_transition(actor=user2, entity='Subscription', entity_id='2', from_status='draft', to_status='active')
 
@@ -78,16 +78,15 @@ class TestScopedQueryset:
         assert scoped_queryset(staff_mock, AuditLog.objects.all()).count() == 2
 
     def test_customer_scoped_to_own_records(self):
-        u1 = User.objects.create_user(username='cust1', email='cust1@brightloop.com')
-        u2 = User.objects.create_user(username='cust2', email='cust2@brightloop.com')
+        u1 = User.objects.create_user(email='cust1@brightloop.com', name='Cust One')
+        u2 = User.objects.create_user(email='cust2@brightloop.com', name='Cust Two')
         l1 = log_transition(actor=u1, entity='Subscription', entity_id='1', from_status='draft', to_status='active')
         l2 = log_transition(actor=u2, entity='Subscription', entity_id='2', from_status='draft', to_status='active')
 
-        # Test with custom model or mock user having role 'customer'
+        # Test with custom model user having role 'customer'
         cust_user = u1
         cust_user.role = 'customer'
         
-        # AuditLog has 'actor' field, so custom resolver or filter checks actor/customer
         qs = scoped_queryset(cust_user, AuditLog.objects.all(), user_field='actor')
         assert qs.count() == 1
         assert qs.first().id == l1.id
