@@ -1,15 +1,46 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Mail, ArrowLeft, CheckCircle2 } from 'lucide-react';
+import { apiClient } from '@/api';
+import { Mail, ArrowLeft, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
 
 export const ForgotPasswordPage: React.FC = () => {
   const [email, setEmail] = useState('');
   const [submitted, setSubmitted] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState('');
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // In accordance with SPEC 5.2: No account enumeration, show same confirmation
-    setSubmitted(true);
+    setError('');
+
+    const trimmedEmail = email.trim();
+    if (!trimmedEmail) {
+      setError('Please enter your email address.');
+      return;
+    }
+
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
+      setError('Please enter a valid email address.');
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      // Connect to backend forgot-password endpoint
+      await apiClient.post('/auth/forgot/', { email: trimmedEmail });
+      // In accordance with SPEC 5.2: No account enumeration, show same confirmation
+      setSubmitted(true);
+    } catch (err: any) {
+      // If network/server failure occurs
+      const errorMsg =
+        err?.data?.detail ||
+        err?.data?.message ||
+        err?.message ||
+        'Unable to process your password reset request. Please check your connection and try again.';
+      setError(errorMsg);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -30,13 +61,20 @@ export const ForgotPasswordPage: React.FC = () => {
 
       <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
         <div className="bg-white py-8 px-6 shadow-md rounded-xl sm:px-10 border border-slate-200">
+          {error && (
+            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700 flex items-start gap-2">
+              <AlertCircle className="w-4 h-4 text-red-500 mt-0.5 shrink-0" />
+              <span>{error}</span>
+            </div>
+          )}
+
           {submitted ? (
             <div className="text-center space-y-4">
               <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-emerald-100 text-emerald-600">
                 <CheckCircle2 className="h-6 w-6" />
               </div>
               <h3 className="text-base font-semibold text-slate-900">Check your inbox</h3>
-              <p className="text-sm text-slate-600 bg-slate-50 p-3 rounded-lg border border-slate-200">
+              <p className="text-sm text-slate-600 bg-slate-50 p-3 rounded-lg border border-slate-200 leading-relaxed">
                 If the account exists, a link was sent. The link expires in 30 minutes.
               </p>
               <div className="pt-2">
@@ -62,9 +100,10 @@ export const ForgotPasswordPage: React.FC = () => {
                   <input
                     type="email"
                     required
+                    disabled={isSubmitting}
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    className="block w-full pl-9 pr-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-hidden focus:ring-2 focus:ring-indigo-600"
+                    className="block w-full pl-9 pr-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-hidden focus:ring-2 focus:ring-indigo-600 disabled:bg-slate-50 disabled:text-slate-500"
                     placeholder="user@example.com"
                   />
                 </div>
@@ -72,9 +111,17 @@ export const ForgotPasswordPage: React.FC = () => {
 
               <button
                 type="submit"
-                className="w-full flex justify-center py-2.5 px-4 border border-transparent rounded-lg shadow-sm text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-hidden focus:ring-2 focus:ring-indigo-500 transition-colors"
+                disabled={isSubmitting}
+                className="w-full flex justify-center items-center gap-2 py-2.5 px-4 border border-transparent rounded-lg shadow-sm text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-hidden focus:ring-2 focus:ring-indigo-500 transition-colors disabled:opacity-70 disabled:cursor-not-allowed"
               >
-                Send Reset Link
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>Sending Reset Link...</span>
+                  </>
+                ) : (
+                  <span>Send Reset Link</span>
+                )}
               </button>
 
               <div className="pt-2 text-center">
@@ -93,3 +140,4 @@ export const ForgotPasswordPage: React.FC = () => {
     </div>
   );
 };
+
