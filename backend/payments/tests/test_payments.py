@@ -96,9 +96,9 @@ class TestPaymentsAndOverdue:
             number="INV-DRAFT",
             subscription=self.sub,
             customer=self.cust,
-            period_start=date.today(),
-            period_end=date.today() + timedelta(days=30),
-            due_date=date.today() + timedelta(days=15),
+            period_start=date.today() - timedelta(days=60),
+            period_end=date.today() - timedelta(days=30),
+            due_date=date.today() - timedelta(days=15),
             status="draft",
             total=Decimal("500.00")
         )
@@ -109,9 +109,9 @@ class TestPaymentsAndOverdue:
             number="INV-CANCELLED",
             subscription=self.sub,
             customer=self.cust,
-            period_start=date.today(),
-            period_end=date.today() + timedelta(days=30),
-            due_date=date.today() + timedelta(days=15),
+            period_start=date.today() - timedelta(days=90),
+            period_end=date.today() - timedelta(days=60),
+            due_date=date.today() - timedelta(days=45),
             status="cancelled",
             total=Decimal("500.00")
         )

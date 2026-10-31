@@ -8,6 +8,8 @@ from core.permissions import IsStaffOrAdmin
 from billing.models import Invoice
 from billing.serializers import InvoiceSerializer
 from billing.services import confirm_invoice, cancel_invoice, mark_sent
+from payments.services import record_payment
+from payments.serializers import PaymentSerializer
 
 class InvoiceViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = InvoiceSerializer
@@ -72,6 +74,30 @@ class InvoiceViewSet(viewsets.ReadOnlyModelViewSet):
         invoice = self.get_object()
         sent = mark_sent(invoice, actor=request.user)
         return Response(self.get_serializer(sent).data)
+
+    @action(detail=True, methods=['post'], permission_classes=[IsStaffOrAdmin])
+    def payments(self, request, pk=None):
+        invoice = self.get_object()
+        method = request.data.get('method')
+        amount = request.data.get('amount')
+        payment_date = request.data.get('payment_date')
+        note = request.data.get('note', '')
+
+        if not method or amount is None:
+            return Response({'error': 'method and amount are required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            payment = record_payment(
+                invoice=invoice,
+                method=method,
+                amount=amount,
+                payment_date=payment_date,
+                note=note,
+                user=request.user
+            )
+            return Response(PaymentSerializer(payment).data, status=status.HTTP_201_CREATED)
+        except ValueError as e:
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
     @action(detail=True, methods=['get'])
     def print(self, request, pk=None):
