@@ -191,6 +191,70 @@ def build_invoice(subscription, period_start):
 
         return invoice
 
+def confirm_invoice(invoice, actor=None):
+    """
+    Validated status change: Draft -> Confirmed. Writes AuditLog row.
+    """
+    if invoice.status != 'draft':
+        raise ValueError(f"Cannot confirm invoice in '{invoice.status}' status (must be 'draft').")
+
+    with transaction.atomic():
+        invoice.status = 'confirmed'
+        invoice.save(update_fields=['status', 'updated_at'])
+        AuditLog.objects.create(
+            actor=actor if actor and getattr(actor, 'is_authenticated', False) else None,
+            action='confirm_invoice',
+            entity='Invoice',
+            entity_id=invoice.number,
+            from_status='draft',
+            to_status='confirmed',
+            note='Invoice confirmed'
+        )
+    return invoice
+
+def cancel_invoice(invoice, actor=None):
+    """
+    Validated status change: Draft or Confirmed -> Cancelled.
+    Paid invoices CANNOT be cancelled. Writes AuditLog row.
+    """
+    if invoice.status == 'paid':
+        raise ValueError("Paid invoices cannot be cancelled.")
+    if invoice.status not in ['draft', 'confirmed']:
+        raise ValueError(f"Cannot cancel invoice in '{invoice.status}' status.")
+
+    with transaction.atomic():
+        from_status = invoice.status
+        invoice.status = 'cancelled'
+        invoice.save(update_fields=['status', 'updated_at'])
+        AuditLog.objects.create(
+            actor=actor if actor and getattr(actor, 'is_authenticated', False) else None,
+            action='cancel_invoice',
+            entity='Invoice',
+            entity_id=invoice.number,
+            from_status=from_status,
+            to_status='cancelled',
+            note='Invoice cancelled'
+        )
+    return invoice
+
+def mark_sent(invoice, actor=None):
+    """
+    Sets sent_at timestamp and logs audit entry.
+    """
+    with transaction.atomic():
+        invoice.sent_at = timezone.now()
+        invoice.save(update_fields=['sent_at', 'updated_at'])
+        AuditLog.objects.create(
+            actor=actor if actor and getattr(actor, 'is_authenticated', False) else None,
+            action='mark_sent',
+            entity='Invoice',
+            entity_id=invoice.number,
+            from_status=invoice.status,
+            to_status=invoice.status,
+            note='Invoice marked as sent'
+        )
+    return invoice
+
 def run_billing(as_of=None):
     """
     Bills every due, active, unpaused subscription;
