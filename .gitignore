@@ -1,15 +1,17 @@
-*.pyc
+*.py[cod]
+*$py.class
 __pycache__/
 *.sqlite3
 db.sqlite3
 .pytest_cache/
+.coverage
+htmlcov/
 *.log
 .env
+.venv
+env/
+venv/
 dist/
 build/
 *.egg-info/
 .DS_Store
-# Ignore documentation and agent rules
-docs/SPEC.md
-README.md
-AGENTS.md
